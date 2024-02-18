@@ -1,0 +1,61 @@
+<!DOCTYPE html>                                              
+<HTML>                                                       
+    <meta charset="UTF-8">
+<HEAD>                                                     
+  <TITLE>{{name}}</TITLE>                             
+  <STYLE>                                                  
+
+    .infobox {                                             
+       position: fixed;                                    
+       top: 30%;                                           
+       left: 30%;                                          
+       pointer-events: none;                               
+       opacity: 0;                                         
+       background-color: #e0e0e0;                          
+       padding:3em;                                        
+       overflow-y: auto;                                   
+       max-width:30em;                                     
+       max-height:30em;                                    
+       box-shadow: 5px 14px 18px 5px rgba(0,0,0,0.7);      
+       &:target {                                          
+         pointer-events: all;                              
+         opacity:1;                                        
+       }                                                   
+    }                                                      
+
+    .infobox-title {                                       
+      font-family: Arial, Helvetica, sans-serif;           
+      font-size: 1.2em;                                    
+    }                                                      
+
+    .infobox-text {                                        
+      font-family: Arial, Helvetica, sans-serif;           
+      font-size: 0.8em;                                    
+
+    }                                                      
+
+    .infobox-close {                                       
+      background-color:darkblue;                           
+      color:white;                                         
+      font-size:24px;                                      
+      padding:8px 12px;                                    
+      position:absolute;                                   
+      right:0;                                             
+      text-align:center;                                   
+      text-decoration:none;                                
+      top:0;                                               
+      z-index: 1;                                          
+    }                                                      
+
+    body {                                                 
+      background-color: white;                             
+      color:black;                                         
+    }                                                      
+
+  </STYLE>                                                 
+</HEAD>                                                    
+<BODY>            
+  {{view}}
+  {{popup}}
+</BODY>
+</HTML>
