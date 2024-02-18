@@ -1,0 +1,213 @@
+﻿/*
+      +++++++++++++++        +++++      
+     +++++++++++++++++        +++++     
+    +++++         +++++        +++++    
+  +++++             +++++        +++++  
+ ++++++++++++++++    ++++++++++++++++++ 
+ ++++++++++++++++++    +++++++++++++++++
+  +++++        +++++             ++++++ 
+    +++++        +++++         ++++++   
+     +++++        ++++++++++++++++++    
+      +++++        +++++++++++++++   
+
+   View2SingleHTML: Export selected view to single HTML file
+   Version 0.9, Feb 2024
+
+   Author : Remco Schellekens (remco.schellekens@ns.nl)
+   Licence: MIT https://mit-license.org/
+
+   When a view is selected, running this script will generate an HTML
+   file with embedded SVG (scales with browser screen size) and clickable 
+   elements that jumps to url found in the "url" property of the element
+   or displays a popup window showing the documentation field of the element
+   (if set).
+
+   The HTML file relies on a little bit of HTML, SVG and included CSS only, and
+   doesn't use javascript and can therefore easily integrated in collaboration 
+   tools like sharepoint.
+
+   If an element has a property "url" in it, it will folow the link, otherwise
+   it will check for an existing "documentation" property and shows a popup if
+   there is one.
+
+   It uses two simple template files stored in the "templates" directory 
+   under the directory the script is stored. One for the surrounding HTML 
+   file (v2s.html) and one for the content of the popup window (popup.html). 
+   So you can customize it to your needs without adjusting this code
+   These are the template keywords that will be replaced by the code:
+
+   template_main:
+   {{view}} => SVG representation of view
+   {{name}} => name of view
+   {{popup}} => place to store generated HTML for popup windows 
+
+   ** Warning, don't delete the ".infobox" css style, it is used to 
+      generate link in SVN up and wrapper for template_popup **
+
+   template_popup:
+   {{name}} => name of element
+   {{documentation}} => documentation of element
+   {{...any element property, if it is empty or doesn't exists, it will be blank ...}}
+
+*/ 
+
+/* templates to use */
+template_main='v2s.html'
+template_popup='v2s_popup.html'
+ 
+
+/* global variables for creating SVG and HTML parts */
+svg=""
+popup=""
+html_template=""
+popup_template=""
+
+/* function for reading files ....why isn't there a $.fs.readFile in jArchi ??....  */
+function readFile(path) {
+  let Files = Java.type("java.nio.file.Files")
+  let Paths = Java.type("java.nio.file.Paths")
+  bytesObj=Files.readAllBytes(Paths.get(path))
+  bytes=Java.from(bytesObj)
+  return String.fromCharCode.apply(null,bytes)
+}
+
+function parsePopup(element) {
+  text=popup_template
+  popup+='<DIV id="'+element.id+'" class="infobox">\n'
+  element.prop().forEach(function(property) {
+    text=text.replaceAll("{{"+property+"}}",element.prop(property))
+  });
+  text=text.replaceAll("{{name}}",element.name)
+  text=text.replaceAll("{{documentation}}",element.documentation.replaceAll("\n","<BR/>"))
+    /* remove all other left over template elements */
+  text=text.replaceAll(/{{[^}]+}}/g,"")
+  popup+=text
+  popup+='</DIV>\n'
+}
+
+function traverseChildren(element,offx,offy) {
+    if (element.bounds) {
+        offx+=element.bounds.x
+        offy+=element.bounds.y
+        if (element.prop('url')!=null) {
+                /* create a box & link that uses given URL */
+                svg+='<a xlink:href="'+element.prop('url')+'">\n'
+                svg+='<path fill="white" d="M'+offx+' '+offy
+                svg+=' L'+String(offx+element.bounds.width)+' '+String(offy)
+                svg+=' L'+String(offx+element.bounds.width)+' '+String(offy+element.bounds.height)
+                svg+=' L'+String(offx)+' '+String(offy+element.bounds.height)
+                svg+='" fill-rule="evenodd" opacity="0.0" stroke="none"/>\n'
+                svg+='</a>\n'
+        } else {
+            if (element.documentation!=null) {
+                /* create a box & link that can be clicked for popup or URL */
+                svg+='<a xlink:href="#'+element.id+'">\n'
+                svg+='<path fill="white" d="M'+offx+' '+offy
+                svg+=' L'+String(offx+element.bounds.width)+' '+String(offy)
+                svg+=' L'+String(offx+element.bounds.width)+' '+String(offy+element.bounds.height)
+                svg+=' L'+String(offx)+' '+String(offy+element.bounds.height)
+                svg+='" fill-rule="evenodd" opacity="0.0" stroke="none"/>\n'
+                svg+='</a>\n'
+
+                /* create a div for popup window */
+                parsePopup(element)
+            }
+        }
+    }
+    console.log("-[ Processing ]------------------------------------------------------------------")
+    console.log("element id    :"+element.id)
+    console.log("element type  :"+element.type)
+    console.log("element name  :"+element.name)
+    console.log("element bounds:"+element.bounds)
+    console.log("element x,y   :"+offx+" "+offy)
+    console.log("element doc   :"+element.documentation)
+    console.log("---------------------------------------------------------------------------------")
+    if ($(element).children()) {
+        $(element).children().each(function(object){
+            traverseChildren(object,offx,offy)
+        })
+    }
+}
+
+/* Main */
+ 
+console.clear()
+console.log("export View to Single HTML")
+
+if (!$(selection).is('archimate-diagram-model')) {
+    window.alert("No view selected")
+    console.log("Select a single view first")
+    exit()
+}
+
+view=$(selection)[0]
+console.log("Using view: "+view.name)
+
+/* Read Templates */
+html_template=readFile(__DIR__ + 'templates/'+template_main)
+popup_template=readFile(__DIR__ + 'templates/'+template_popup)
+
+
+/* first, create an invisible opbject in upper left corner      */
+/* this will prevent cropping by SVG and will determine         */
+/* x,y offset in coordinates between Archi and SVG              */
+ref=view.createObject("diagram-model-note",0,0,1,1)
+ref.borderType=BORDER.NONE
+ref.fillColor="#ff00ff" /* translates to "fuchsia" in svg*/
+ref.opacity=0
+
+/* if we can't find reference point, use default 10px */
+Xoff=10
+Yoff=10
+
+/* create SVG with reference point in it */
+svg=$.model.renderViewAsSVGString(view,true)
+
+/* delete reference point in model (is in svg now)*/
+ref.delete()
+
+/* find reference point */
+refstart=svg.lastIndexOf('<path fill="fuchsia"')
+if (refstart>0) {
+    refline=svg.substring(refstart).split('>')[0]+'>'
+    /* find beginning of draw command, M="Move"  */
+    startpath=4+refline.indexOf('d="M')
+    Xoff=Number(refline.substring(startpath).split(" ")[0])
+    Yoff=Number(refline.substring(startpath).split(" ")[1])
+    /* remove reference point from svg */
+    svg=svg.replace(refline,"")
+} else {
+    console.log("Warning, can't find reference point, using default x&y offsets")
+    /* render again, without reference point */
+}
+
+/* chop end svg tag so we can add items to svg element */
+start=svg.lastIndexOf('</svg')
+svg=svg.substring(0,start)
+
+/* loop through elements, find the ones with a comment and create rectangle for it, */
+/* used to denote clicking area                                                    */
+traverseChildren(view,Xoff,Yoff)
+
+/* chop off xml and DOCTYPE elements, svg will be encapsuled by HTML */
+start=svg.indexOf('<svg')
+svg=svg.substring(start)
+
+/* add svg tag we removed earlier */
+svg+="</svg>\n"
+
+/* combine all the stuff in a single HTML file */
+
+html=html_template
+html=html.replace("{{view}}",svg)
+html=html.replace("{{popup}}",popup)
+html=html.replace("{{name}}",view.name)
+
+/* and save the thing */
+filePath=window.promptSaveFile({ title: "Save HTML",fiterExtensions: [ "*.html","*.aspx"]})
+if (filePath) {
+    $.fs.writeFile(filePath,html,"UTF8")
+}
+
+console.log("Done")
+
